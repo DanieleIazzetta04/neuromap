@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { FOLDER_PALETTE } from './store.jsx';
+import { useStore } from './store.jsx';
 
 /* NeuroMap — Shared UI primitives */
 
@@ -116,11 +116,26 @@ export function AutoTextarea({
   );
 }
 
-// ColorSwatches — a grid of folder-colour choices.
+// ColorSwatches — the 13-colour folder scale plus a custom HEX picker as the
+// 14th circle. Picking a custom colour prepends it to the palette, so it
+// becomes the first swatch and the scale shifts down by one.
 export function ColorSwatches({ value, onChange }) {
+  const { palette, addPaletteColor } = useStore();
+  const pickRef = React.useRef(null);
+  const cbRef = React.useRef(null);
+  cbRef.current = (c) => { addPaletteColor(c); onChange(c); };
+
+  React.useEffect(() => {
+    const el = pickRef.current;
+    if (!el) return undefined;
+    const onPick = () => cbRef.current(el.value);
+    el.addEventListener('change', onPick);
+    return () => el.removeEventListener('change', onPick);
+  }, []);
+
   return (
-    <div className="swatches">
-      {FOLDER_PALETTE.map((c) => (
+    <div className="swatches" onClick={(e) => e.stopPropagation()}>
+      {palette.map((c) => (
         <button
           key={c}
           type="button"
@@ -130,6 +145,9 @@ export function ColorSwatches({ value, onChange }) {
           onClick={() => onChange(c)}
         />
       ))}
+      <label className="swatch swatch-pick" title="Scegli un colore personalizzato">
+        <input ref={pickRef} type="color" aria-label="Colore personalizzato" />
+      </label>
     </div>
   );
 }

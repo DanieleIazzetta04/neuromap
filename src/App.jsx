@@ -42,10 +42,13 @@ function Logo() {
   );
 }
 
-function TopBar({ onSearch, dark, onToggleDark }) {
+function TopBar({ onSearch, dark, onToggleDark, onMenu }) {
   const [q, setQ] = React.useState('');
   return (
     <header className="topbar">
+      <button className="icon-btn topbar-menu" onClick={onMenu} aria-label="Apri menu">
+        <AppIcon.menu />
+      </button>
       <div className="brand">
         <span className="brand-mark"><Logo /></span>
         <span className="brand-name"><b>Neuro</b>Map</span>
@@ -81,7 +84,6 @@ function TopBar({ onSearch, dark, onToggleDark }) {
             </svg>
           )}
         </button>
-        <button className="icon-btn" aria-label="Impostazioni"><AppIcon.settings /></button>
         <div style={{
           width: 28, height: 28, marginLeft: 4,
           borderRadius: '50%',
@@ -101,6 +103,7 @@ function App() {
   const { notes } = useStore();
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [route, setRoute] = React.useState({ kind: 'recenti' });
+  const [navOpen, setNavOpen] = React.useState(false);
 
   const [dark, setDark] = React.useState(
     () => document.documentElement.dataset.theme === 'dark',
@@ -131,8 +134,12 @@ function App() {
 
   return (
     <div className="app" data-palette={t.palette} data-density={t.density}>
-      <TopBar onSearch={onSearch} dark={dark} onToggleDark={() => setDark((d) => !d)} />
-      <Sidebar route={route} onRoute={setRoute} />
+      <TopBar onSearch={onSearch} dark={dark} onToggleDark={() => setDark((d) => !d)}
+              onMenu={() => setNavOpen(true)} />
+      <Sidebar route={route}
+               onRoute={(r) => { setRoute(r); setNavOpen(false); }}
+               open={navOpen}
+               onClose={() => setNavOpen(false)} />
       <main className="main">
         {route.kind === 'note'    && <EditorView noteId={route.id} onOpenNote={onOpenNote} onRoute={setRoute} />}
         {route.kind === 'search'  && <SearchView initialQ={route.q} onOpenNote={onOpenNote} />}

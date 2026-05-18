@@ -124,6 +124,16 @@ function TableBlock({ block, onChange }) {
   });
   const addRow = () => onChange({ ...block, rows: [...rows, head.map(() => '')] });
   const delRow = (r) => onChange({ ...block, rows: rows.filter((_, ri) => ri !== r) });
+  const addCol = () => onChange({
+    ...block,
+    head: [...head, `Colonna ${head.length + 1}`],
+    rows: rows.map((row) => [...row, '']),
+  });
+  const delCol = (c) => onChange({
+    ...block,
+    head: head.filter((_, i) => i !== c),
+    rows: rows.map((row) => row.filter((_, i) => i !== c)),
+  });
 
   return (
     <div className="table-edit">
@@ -132,8 +142,14 @@ function TableBlock({ block, onChange }) {
           <tr>
             {head.map((h, i) => (
               <th key={i}>
-                <input className="cell-input" value={h} placeholder={`Colonna ${i + 1}`}
-                       onChange={(e) => setHead(i, e.target.value)} />
+                <div className="th-cell">
+                  <input className="cell-input" value={h} placeholder={`Colonna ${i + 1}`}
+                         onChange={(e) => setHead(i, e.target.value)} />
+                  {head.length > 1 && (
+                    <button type="button" className="col-del" title="Elimina colonna"
+                            onClick={() => delCol(i)}>{ico.x}</button>
+                  )}
+                </div>
               </th>
             ))}
             <th className="table-gutter" />
@@ -156,7 +172,10 @@ function TableBlock({ block, onChange }) {
           ))}
         </tbody>
       </table>
-      <button type="button" className="table-add-row" onClick={addRow}>{ico.plus} Riga</button>
+      <div className="table-actions">
+        <button type="button" className="table-add-row" onClick={addRow}>{ico.plus} Riga</button>
+        <button type="button" className="table-add-row" onClick={addCol}>{ico.plus} Colonna</button>
+      </div>
     </div>
   );
 }

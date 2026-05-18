@@ -14,18 +14,16 @@ import {
 
 const STORAGE_KEY = 'neuromap.v1';
 
-// Folder colour palette — also offered in the folder colour picker.
-export const FOLDER_PALETTE = [
-  'oklch(42% 0.060 178)',
-  'oklch(64% 0.130 72)',
-  'oklch(48% 0.090 145)',
-  'oklch(57% 0.150 25)',
-  'oklch(47% 0.100 320)',
-  'oklch(52% 0.100 250)',
-  'oklch(58% 0.130 52)',
-  'oklch(50% 0.095 200)',
-  'oklch(46% 0.110 290)',
-  'oklch(55% 0.120 350)',
+// A 13-colour scale offered in the folder colour picker. The live palette
+// lives in store state: when the user picks a custom colour it is prepended
+// and the palette is trimmed back to 13 (the colours "shift").
+const PALETTE_SIZE = 13;
+const SEED_PALETTE = [
+  'oklch(55% 0.12 0)', 'oklch(55% 0.12 28)', 'oklch(55% 0.12 55)',
+  'oklch(55% 0.12 83)', 'oklch(55% 0.12 111)', 'oklch(55% 0.12 139)',
+  'oklch(55% 0.12 166)', 'oklch(55% 0.12 194)', 'oklch(55% 0.12 222)',
+  'oklch(55% 0.12 250)', 'oklch(55% 0.12 277)', 'oklch(55% 0.12 305)',
+  'oklch(55% 0.12 333)',
 ];
 
 let _seq = 0;
@@ -92,6 +90,7 @@ function loadState() {
           notes: parsed.notes.map(normalizeNote),
           sources: Array.isArray(parsed.sources) ? parsed.sources : seedSources(),
           regions: Array.isArray(parsed.regions) ? parsed.regions : seedRegions(),
+          palette: Array.isArray(parsed.palette) ? parsed.palette : SEED_PALETTE.slice(),
         };
       }
     }
@@ -103,6 +102,7 @@ function loadState() {
     notes: SEED_NOTES.map((n) => normalizeNote({ ...n })),
     sources: seedSources(),
     regions: seedRegions(),
+    palette: SEED_PALETTE.slice(),
   };
 }
 
@@ -119,13 +119,14 @@ export function StoreProvider({ children }) {
     }
   }, [state]);
 
-  const { folders, notes, sources, regions } = state;
+  const { folders, notes, sources, regions, palette } = state;
 
   const api = React.useMemo(() => ({
     folders,
     notes,
     sources,
     regions,
+    palette,
     getFolder: (id) => folders.find((f) => f.id === id),
     getNote: (id) => notes.find((n) => n.id === id),
     getSource: (id) => sources.find((s) => s.id === id),
@@ -169,7 +170,7 @@ export function StoreProvider({ children }) {
     },
 
     createFolder: (name, color) => {
-      const fallback = FOLDER_PALETTE[folders.length % FOLDER_PALETTE.length];
+      const fallback = palette[folders.length % palette.length];
       const folder = {
         id: uid('f'),
         name: (name || '').trim() || 'Nuova cartella',
@@ -230,6 +231,14 @@ export function StoreProvider({ children }) {
       return region.id;
     },
 
+    // A picked colour jumps to the front; the palette stays PALETTE_SIZE long.
+    addPaletteColor: (color) => {
+      setState((s) => ({
+        ...s,
+        palette: [color, ...s.palette.filter((c) => c !== color)].slice(0, PALETTE_SIZE),
+      }));
+    },
+
     // Removing a region also detaches it from every note that used it.
     deleteRegion: (id) => {
       setState((s) => ({
@@ -242,7 +251,7 @@ export function StoreProvider({ children }) {
         )),
       }));
     },
-  }), [folders, notes, sources, regions]);
+  }), [folders, notes, sources, regions, palette]);
 
   return <StoreContext.Provider value={api}>{children}</StoreContext.Provider>;
 }

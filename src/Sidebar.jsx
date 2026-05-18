@@ -1,5 +1,5 @@
 import React from 'react';
-import { useStore, useConfirm, FOLDER_PALETTE } from './store.jsx';
+import { useStore, useConfirm } from './store.jsx';
 import { Dropdown, ColorSwatches } from './ui.jsx';
 
 /* NeuroMap — Sidebar
@@ -13,6 +13,11 @@ const Icon = {
     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
       <circle cx="7" cy="7" r="4.2" />
       <path d="M10.2 10.2 13.5 13.5" />
+    </svg>
+  ),
+  menu: () => (
+    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
     </svg>
   ),
   book: () => (
@@ -30,12 +35,6 @@ const Icon = {
   plus: () => (
     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
       <path d="M8 3.5v9M3.5 8h9" />
-    </svg>
-  ),
-  settings: () => (
-    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.4">
-      <circle cx="8" cy="8" r="2" />
-      <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M3.6 12.4l1.4-1.4M11 5l1.4-1.4" strokeLinecap="round" />
     </svg>
   ),
   star: () => (
@@ -134,11 +133,12 @@ function FolderRow({ folder, count, active, onOpen, onRename, onSetColor, onDele
 
 // ─── Inline "new folder" panel — name + colour ───────────────────────────
 function NewFolderRow({ onCreate }) {
+  const { palette } = useStore();
   const [adding, setAdding] = React.useState(false);
   const [name, setName] = React.useState('');
-  const [color, setColor] = React.useState(FOLDER_PALETTE[0]);
+  const [color, setColor] = React.useState(palette[0]);
 
-  const reset = () => { setAdding(false); setName(''); setColor(FOLDER_PALETTE[0]); };
+  const reset = () => { setAdding(false); setName(''); setColor(palette[0]); };
   const create = () => {
     const clean = name.trim();
     if (clean) onCreate(clean, color);
@@ -176,10 +176,18 @@ function NewFolderRow({ onCreate }) {
   );
 }
 
-function Sidebar({ route, onRoute }) {
+function Sidebar({ route, onRoute, open = false, onClose }) {
   const store = useStore();
   const confirm = useConfirm();
   const { folders } = store;
+
+  // Mobile drawer: Escape closes it.
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') onClose && onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   const isSearch  = route.kind === 'search';
   const isBiblio  = route.kind === 'biblio';
@@ -204,7 +212,9 @@ function Sidebar({ route, onRoute }) {
   };
 
   return (
-    <aside className="sidebar">
+    <>
+      <div className={`sidebar-scrim ${open ? 'is-open' : ''}`} onClick={onClose} />
+      <aside className={`sidebar ${open ? 'is-open' : ''}`}>
       <button className="side-new-btn" onClick={newNote}>
         <Icon.plus /> Nuova nota
       </button>
@@ -259,7 +269,8 @@ function Sidebar({ route, onRoute }) {
         <span className="side-icon"><Icon.download /></span>
         <span>Esporta PDF</span>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 

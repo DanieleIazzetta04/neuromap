@@ -99,7 +99,7 @@ body::before {
   position: relative; z-index: 1;
   display: grid;
   grid-template-columns: 232px 1fr;
-  grid-template-rows: 52px 1fr;
+  grid-template-rows: 64px 1fr;
   height: 100vh;
   min-height: 600px;
 }
@@ -107,7 +107,7 @@ body::before {
 .topbar {
   grid-column: 1 / -1;
   display: flex; align-items: center; gap: 16px;
-  padding: 0 18px 0 22px;
+  padding: 12px 18px 0 22px;
   border-bottom: .5px solid var(--rule);
   background: var(--paper);
   position: relative; z-index: 3;
@@ -163,6 +163,10 @@ body::before {
 }
 
 .topbar-actions { display: flex; align-items: center; gap: 4px; }
+
+/* Drawer affordances — hidden on desktop, shown by the mobile breakpoint. */
+.icon-btn.topbar-menu { display: none; }
+.sidebar-scrim { display: none; }
 .icon-btn {
   appearance: none; border: 0; background: transparent;
   width: 32px; height: 32px;
@@ -1191,8 +1195,9 @@ textarea.editor-title::placeholder { color: var(--ink-4); }
 }
 .table-edit tr .row-action { visibility: hidden; }
 .table-edit tr:hover .row-action { visibility: visible; }
+.table-actions { display: flex; gap: 6px; margin-top: 8px; }
 .table-add-row {
-  appearance: none; margin-top: 8px;
+  appearance: none;
   display: inline-flex; align-items: center; gap: 5px;
   padding: 6px 11px;
   border: .5px solid var(--rule); border-radius: var(--r-1);
@@ -1200,6 +1205,18 @@ textarea.editor-title::placeholder { color: var(--ink-4); }
   font: inherit; font-size: 12px; cursor: pointer;
 }
 .table-add-row:hover { border-color: var(--accent); color: var(--accent); }
+.th-cell { display: flex; align-items: center; gap: 4px; }
+.th-cell .cell-input { flex: 1; min-width: 0; }
+.col-del {
+  appearance: none; flex: 0 0 auto;
+  width: 16px; height: 16px; padding: 0;
+  display: grid; place-items: center;
+  border: 0; border-radius: 4px;
+  background: transparent; color: var(--ink-4);
+  cursor: pointer; visibility: hidden;
+}
+.block table.b th:hover .col-del { visibility: visible; }
+.col-del:hover { background: var(--rose-soft); color: var(--rose); }
 
 /* ─── Editor: bibliography panel ───────────────────────────────────────── */
 .biblio-item { display: flex; align-items: flex-start; gap: 8px; }
@@ -1269,6 +1286,18 @@ textarea.editor-title::placeholder { color: var(--ink-4); }
 }
 .swatch:hover { transform: scale(1.13); }
 .swatch.is-on { box-shadow: 0 0 0 2px var(--paper-3), 0 0 0 4px var(--ink); }
+.swatch-pick {
+  position: relative; overflow: hidden;
+  background: conic-gradient(from 0deg,
+    oklch(65% 0.2 0), oklch(65% 0.2 60), oklch(65% 0.2 120),
+    oklch(65% 0.2 180), oklch(65% 0.2 240), oklch(65% 0.2 300), oklch(65% 0.2 360));
+}
+.swatch-pick input {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  margin: 0; padding: 0; border: 0;
+  opacity: 0; cursor: pointer;
+}
 
 .menu-swatches { padding: 7px 8px 9px; }
 .menu-sep { height: 1px; background: var(--rule); margin: 4px 2px; }
@@ -1526,3 +1555,56 @@ textarea.editor-title::placeholder { color: var(--ink-4); }
   transition: background .12s, color .12s;
 }
 .region-row-del:hover { background: var(--rose-soft); color: var(--rose); }
+
+/* ─── Mobile — drawer sidebar + single-column reflow ───────────────────── */
+@media (max-width: 720px) {
+  .app { grid-template-columns: 1fr; }
+
+  /* Top bar: hamburger in, wordmark out, search keeps the room */
+  .topbar { gap: 10px; padding: 10px 12px 0 12px; }
+  .icon-btn.topbar-menu { display: grid; }
+  .brand { width: auto; flex: 0 0 auto; }
+  .brand-name { display: none; }
+  .topbar-search { gap: 8px; padding: 0 10px; }
+  .topbar-search .kbd { display: none; }
+
+  /* Sidebar slides in as an off-canvas drawer */
+  .sidebar {
+    position: fixed;
+    top: 0; bottom: 0; left: 0;
+    width: 270px; max-width: 84vw;
+    z-index: 41;
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    box-shadow: var(--shadow-2);
+  }
+  .sidebar.is-open { transform: translateX(0); }
+
+  .sidebar-scrim {
+    display: block;
+    position: fixed; inset: 0;
+    z-index: 40;
+    background: oklch(0% 0 0 / .42);
+    opacity: 0; pointer-events: none;
+    transition: opacity .22s ease;
+  }
+  .sidebar-scrim.is-open { opacity: 1; pointer-events: auto; }
+
+  /* Editor: stack the document and bibliography into one scroll */
+  .editor {
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+  }
+  .editor-scroll { overflow: visible; padding: 24px 16px 60px; }
+  .editor-doc { max-width: none; }
+  .editor-title { font-size: 32px; }
+  .biblio {
+    border-left: 0;
+    border-top: .5px solid var(--rule);
+    overflow: visible;
+  }
+  .biblio-list { overflow: visible; }
+
+  /* Card grids collapse to a single column */
+  .results-grid, .folder-grid { grid-template-columns: 1fr; }
+}
