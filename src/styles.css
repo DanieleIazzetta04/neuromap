@@ -573,6 +573,9 @@ mark.hit {
   grid-template-columns: minmax(0, 1fr) 320px;
   height: 100%; overflow: hidden;
 }
+/* Bibliography panel hidden via the toolbar toggle — works in any layout. */
+.editor.biblio-hidden { grid-template-columns: 1fr; }
+.editor.biblio-hidden .biblio { display: none; }
 .editor-scroll {
   overflow-y: auto;
   padding: 32px clamp(28px, 6vw, 80px) 80px;
@@ -627,8 +630,24 @@ mark.hit {
   margin: 18px 0 4px; font-family: var(--font-display);
   font-size: 20px; font-weight: 500; line-height: 1.2;
 }
-.block p.b { margin: 0; font-size: 15px; line-height: 1.65; color: var(--ink); }
+.block p.b, .block .b.para { margin: 0; font-size: 15px; line-height: 1.65; color: var(--ink); }
 .block ul.b, .block ol.b { margin: 4px 0; padding-left: 22px; font-size: 15px; line-height: 1.7; }
+
+/* Lines and list items rendered by RichText (multiline mode). */
+.block .b-line { min-height: 1em; }
+.block .b-line-empty { min-height: 1em; }
+.block .b-li {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding-left: 4px;
+}
+.block .b-li + .b-li { margin-top: 1px; }
+.block .b-li-marker {
+  flex: 0 0 auto; min-width: 18px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.block .b-li-body { flex: 1; min-width: 0; }
 .block ul.b li::marker { color: var(--accent); }
 .block code.inline {
   font-family: var(--font-mono); font-size: 88%;
@@ -1138,7 +1157,9 @@ textarea.editor-title::placeholder { color: var(--ink-4); }
   box-shadow: var(--shadow-1);
   opacity: 0; transition: opacity .12s;
 }
-.block:hover .block-tools, .block.is-editing .block-tools { opacity: 1; }
+.block:hover .block-tools { opacity: 1; }
+/* While typing, hide the toolbar so it doesn't cover the text. */
+.block.is-editing .block-tools { opacity: 0; pointer-events: none; }
 .block-tools button {
   appearance: none; border: 0; background: transparent; padding: 0;
   width: 22px; height: 22px;

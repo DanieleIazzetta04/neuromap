@@ -6,16 +6,18 @@ import { useStore } from './store.jsx';
    con la parola evidenziata.
 */
 
-// Highlight matches of `q` inside `text` as <mark>
+// Highlight every search token inside `text` as <mark>. Tokens are
+// space-separated; case-insensitive substring matches.
 function Highlight({ text, q }) {
-  const query = (q || '').trim();
-  if (query.length < 2) return <>{text}</>;
-  const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-  const lower = query.toLowerCase();
+  const tokens = (q || '').trim().split(/\s+/).filter((t) => t.length >= 1);
+  if (tokens.length === 0) return <>{text}</>;
+  const pattern = tokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const re = new RegExp(`(${pattern})`, 'gi');
+  const lowers = tokens.map((t) => t.toLowerCase());
   return (
     <>
       {String(text).split(re).map((p, i) => (
-        p.toLowerCase() === lower
+        lowers.includes(p.toLowerCase())
           ? <mark key={i} className="hit">{p}</mark>
           : <React.Fragment key={i}>{p}</React.Fragment>
       ))}
@@ -23,19 +25,51 @@ function Highlight({ text, q }) {
   );
 }
 
-// Match score: matches in title weighted higher
-function searchNotes(notes, q) {
-  const query = (q || '').trim();
-  if (query.length < 2) return [];
-  const re = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+// Build a lowercase haystack of everything a note actually contains: every
+// block's text/caption/cells/labels, plus region labels and source metadata.
+function noteHaystack(note, store) {
+  const parts = [];
+  for (const b of (note.blocks || [])) {
+    if (b.text) parts.push(b.text);
+    if (b.caption) parts.push(b.caption);
+    if (Array.isArray(b.head)) parts.push(b.head.join(' '));
+    if (Array.isArray(b.rows)) parts.push(b.rows.flat().join(' '));
+    if (Array.isArray(b.data)) parts.push(b.data.map((d) => d.label || '').join(' '));
+  }
+  for (const rid of (note.regions || [])) {
+    const r = store.getRegion(rid);
+    if (r && r.label) parts.push(r.label);
+  }
+  for (const sid of (note.refs || [])) {
+    const s = store.getSource(sid);
+    if (s) parts.push([s.title, s.authors, s.journal].filter(Boolean).join(' '));
+  }
+  return parts.join(' \n ').toLowerCase();
+}
+
+// Multi-token search: every space-separated token must appear somewhere in
+// the note (title, excerpt, body, captions, table cells, chart labels,
+// region labels, bibliography). Score weighs title > excerpt > body.
+function searchNotes(notes, q, store) {
+  const query = (q || '').trim().toLowerCase();
+  if (!query) return [];
+  const tokens = query.split(/\s+/).filter(Boolean);
   return notes
-    .map(n => {
-      const inTitle   = re.test(n.title || '')   ? 3 : 0;
-      const inExcerpt = re.test(n.excerpt || '') ? 2 : 0;
-      const inBody    = (n.blocks || []).some(b => b.text && re.test(b.text)) ? 1 : 0;
-      return { note: n, score: inTitle + inExcerpt + inBody };
+    .map((n) => {
+      const title = (n.title || '').toLowerCase();
+      const excerpt = (n.excerpt || '').toLowerCase();
+      const body = noteHaystack(n, store);
+      let score = 0;
+      for (const t of tokens) {
+        const inTitle = title.includes(t);
+        const inExcerpt = excerpt.includes(t);
+        const inBody = body.includes(t);
+        if (!inTitle && !inExcerpt && !inBody) return null;
+        score += (inTitle ? 5 : 0) + (inExcerpt ? 2 : 0) + (inBody ? 1 : 0);
+      }
+      return { note: n, score };
     })
-    .filter(r => r.score > 0)
+    .filter(Boolean)
     .sort((a, b) => b.score - a.score);
 }
 
@@ -62,12 +96,12 @@ function SearchList({ results, q, onOpenNote }) {
 
   return (
     <>
-      {folderIds.map(fid => {
-        const f = getFolder(fid);
+      {folderIds.map((fid) => {
+        const f = getFolder(fid) || { name: 'Senza cartella', color: 'var(--ink-3)' };
         return (
-          <div key={fid} className={`results-group ${f.tag}`}>
+          <div key={fid} className="results-group">
             <div className="results-group-head">
-              <span className="side-dot" />
+              <span className="side-dot" style={{ '--c': f.color }} />
               <h3>{f.name}</h3>
               <span className="results-group-count">
                 · {grouped[fid].length}&nbsp;{grouped[fid].length === 1 ? 'nota' : 'note'}
@@ -76,11 +110,12 @@ function SearchList({ results, q, onOpenNote }) {
             <div className="results-grid">
               {grouped[fid].map(({ note }) => (
                 <div key={note.id} className="result-card" onClick={() => onOpenNote(note.id)}>
-                  <h4><Highlight text={note.title} q={q} /></h4>
-                  <p className="result-excerpt"><Highlight text={note.excerpt} q={q} /></p>
+                  <h4><Highlight text={note.title || 'Senza titolo'} q={q} /></h4>
+                  <p className="result-excerpt"><Highlight text={note.excerpt || ''} q={q} /></p>
                   <div className="result-meta">
-                    {note.regions.map(rid => {
+                    {(note.regions || []).map((rid) => {
                       const r = getRegion(rid);
+                      if (!r) return null;
                       return <span key={rid} className="chip" style={{
                         '--c': 'var(--ink-3)', '--cs': 'transparent', padding: '1px 6px 1px 0',
                         fontSize: 10.5, fontWeight: 500,
@@ -252,10 +287,11 @@ function SearchGraph({ results, q, onOpenNote }) {
 
 // ─── Search view ─────────────────────────────────────────────────────────
 function SearchView({ initialQ, onOpenNote }) {
-  const { notes } = useStore();
+  const store = useStore();
+  const { notes } = store;
   const [q, setQ] = React.useState(initialQ || '');
   const [mode, setMode] = React.useState('list'); // 'list' | 'graph'
-  const results = React.useMemo(() => searchNotes(notes, q), [notes, q]);
+  const results = React.useMemo(() => searchNotes(notes, q, store), [notes, q, store]);
 
   React.useEffect(() => { setQ(initialQ || ''); }, [initialQ]);
 
@@ -283,26 +319,13 @@ function SearchView({ initialQ, onOpenNote }) {
             </svg>
             Grafo
           </button>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Prova:</span>
-            {['ossa', 'cuore', 'rene', 'calcio', 'angiotensina'].map(s => (
-              <button key={s} onClick={() => setQ(s)}
-                      style={{ background: q === s ? 'var(--accent-tint)' : 'transparent',
-                               color: q === s ? 'var(--accent)' : 'var(--ink-3)',
-                               border: '.5px solid ' + (q === s ? 'var(--accent)' : 'var(--rule)'),
-                               padding: '4px 10px', borderRadius: 999,
-                               fontSize: 12, fontFamily: 'inherit', cursor: 'pointer' }}>
-                {s}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
       <div className="search-results">
-        {q.trim().length < 2 ? (
+        {q.trim().length === 0 ? (
           <div className="view-empty">
-            <p>Digita almeno due lettere nella barra di ricerca in alto,
-               oppure scegli un suggerimento qui sopra.</p>
+            <p>Digita una parola nella barra di ricerca in alto.
+               La ricerca legge titolo, testo, didascalie, tabelle, regioni e fonti.</p>
           </div>
         ) : mode === 'list' ? (
           <SearchList results={results} q={q} onOpenNote={onOpenNote} />

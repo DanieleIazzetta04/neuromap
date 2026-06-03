@@ -120,12 +120,13 @@ function App() {
   const onOpenNote = (id) => setRoute({ kind: 'note', id: id || (notes[0] && notes[0].id) });
   const onSearch = (q) => setRoute({ kind: 'search', q });
 
-  // Keyboard: ⌘K opens search
+  // Keyboard: ⌘K focuses the topbar search field.
   React.useEffect(() => {
     const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        onSearch('ossa');
+        const el = document.querySelector('.topbar-search input');
+        if (el) el.focus();
       }
     };
     window.addEventListener('keydown', onKey);

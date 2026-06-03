@@ -21,6 +21,7 @@ const ico = {
   x: <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>,
   info: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="9" r="6.5" /><path d="M9 6v3.5M9 12.2v.1" /></svg>,
   image: <svg viewBox="0 0 18 18" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="3.5" width="13" height="11" rx="1.6" /><circle cx="6.6" cy="7.4" r="1.4" /><path d="M3.5 12.5l3.5-3 2.6 2.2 2.4-1.8 2.5 2.1" /></svg>,
+  panel: <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5" /><path d="M10.5 3v10" /></svg>,
 };
 
 function placeholderFor(type) {
@@ -56,8 +57,10 @@ function downscaleImage(file, cb) {
 }
 
 // ─── Inline rich text — [[wiki-link]] popovers + <b>bold</b> ──────────────
-function RichText({ text, onLink }) {
-  const { notes, getFolder } = useStore();
+// parseInline walks a single line; RichText below stitches lines together
+// and recognises list markers ("1. " / "• " / "- " / "* ") at line starts.
+function parseInline(text, ctx) {
+  const { notes, getFolder, onLink } = ctx;
   const parts = [];
   let rest = text || '';
   let key = 0;
@@ -110,7 +113,46 @@ function RichText({ text, onLink }) {
     }
     rest = rest.slice(m.index + m[0].length);
   }
-  return <>{parts}</>;
+  return parts;
+}
+
+const LINE_NUM_RE = /^(\s*)(\d+)\.\s+(.*)$/;
+const LINE_BUL_RE = /^(\s*)([•*\-])\s+(.*)$/;
+
+function RichText({ text, onLink, multiline = false }) {
+  const { notes, getFolder } = useStore();
+  if (!text) return null;
+  const ctx = { notes, getFolder, onLink };
+  if (!multiline || !text.includes('\n')) {
+    return <>{parseInline(text, ctx)}</>;
+  }
+  const lines = String(text).split('\n');
+  return (
+    <>
+      {lines.map((line, i) => {
+        const numMatch = line.match(LINE_NUM_RE);
+        const bulMatch = line.match(LINE_BUL_RE);
+        if (numMatch) {
+          return (
+            <div key={i} className="b-li b-li-num">
+              <span className="b-li-marker">{numMatch[2]}.</span>
+              <span className="b-li-body">{parseInline(numMatch[3], ctx)}</span>
+            </div>
+          );
+        }
+        if (bulMatch) {
+          return (
+            <div key={i} className="b-li b-li-bul">
+              <span className="b-li-marker">•</span>
+              <span className="b-li-body">{parseInline(bulMatch[3], ctx)}</span>
+            </div>
+          );
+        }
+        if (line.length === 0) return <div key={i} className="b-line b-line-empty" />;
+        return <div key={i} className="b-line">{parseInline(line, ctx)}</div>;
+      })}
+    </>
+  );
 }
 
 // ─── Editable table block ────────────────────────────────────────────────
@@ -242,6 +284,8 @@ function Block({ block, editing, setEditing, onChange, onDelete, onMove, isFirst
 
   const isText = TEXT_TYPES.includes(block.type);
 
+  const multilineType = block.type === 'p' || block.type === 'callout';
+
   if (isText && editing) {
     return (
       <div className="block is-editing">
@@ -251,6 +295,7 @@ function Block({ block, editing, setEditing, onChange, onDelete, onMove, isFirst
           value={block.text}
           autoFocus
           placeholder={placeholderFor(block.type)}
+          lists={multilineType}
           onChange={(v) => onChange({ ...block, text: v })}
           onDone={() => setEditing(null)}
         />
@@ -262,7 +307,7 @@ function Block({ block, editing, setEditing, onChange, onDelete, onMove, isFirst
     const empty = !block.text || !block.text.trim();
     const inner = empty
       ? <span className="block-placeholder">{placeholderFor(block.type)}</span>
-      : <RichText text={block.text} onLink={onLink} />;
+      : <RichText text={block.text} onLink={onLink} multiline={multilineType} />;
     let body;
     if (block.type === 'h2') body = <h2 className="b">{inner}</h2>;
     else if (block.type === 'h3') body = <h3 className="b">{inner}</h3>;
@@ -273,7 +318,7 @@ function Block({ block, editing, setEditing, onChange, onDelete, onMove, isFirst
           <div>{inner}</div>
         </div>
       );
-    } else body = <p className="b">{inner}</p>;
+    } else body = <div className="b para">{inner}</div>;
     return (
       <div className="block block--clickable" onClick={() => setEditing(block.id)}>
         {toolbar}
@@ -396,6 +441,12 @@ function EditorView({ noteId, onOpenNote, onRoute }) {
   const note = store.getNote(noteId);
   const [editingId, setEditingId] = React.useState(null);
   const [newRegion, setNewRegion] = React.useState('');
+  const [biblioHidden, setBiblioHidden] = React.useState(() => {
+    try { return localStorage.getItem('neuromap.ui.biblioHidden') === '1'; } catch (e) { return false; }
+  });
+  React.useEffect(() => {
+    try { localStorage.setItem('neuromap.ui.biblioHidden', biblioHidden ? '1' : '0'); } catch (e) { /* ignore */ }
+  }, [biblioHidden]);
 
   if (!note) {
     return (
@@ -445,7 +496,7 @@ function EditorView({ noteId, onOpenNote, onRoute }) {
   };
 
   return (
-    <div className="editor">
+    <div className={`editor ${biblioHidden ? 'biblio-hidden' : ''}`}>
       <div className="editor-scroll">
         <div className="editor-doc">
           <div className="editor-meta">
@@ -523,6 +574,11 @@ function EditorView({ noteId, onOpenNote, onRoute }) {
             <span>Aggiornata {note.updated}</span>
 
             <span className="editor-meta-actions">
+              <button type="button" className={`icon-btn ${biblioHidden ? '' : 'is-active'}`}
+                      title={biblioHidden ? 'Mostra bibliografia' : 'Nascondi bibliografia'}
+                      onClick={() => setBiblioHidden((h) => !h)}>
+                {ico.panel}
+              </button>
               <button type="button" className={`icon-btn star-btn ${note.starred ? 'is-on' : ''}`}
                       title={note.starred ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
                       onClick={() => store.toggleStar(note.id)}>

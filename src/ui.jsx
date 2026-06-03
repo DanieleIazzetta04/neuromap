@@ -83,20 +83,63 @@ export function Dropdown({ trigger, children, align = 'left', className = '' }) 
 
 // AutoTextarea — a textarea that grows to fit its content. Used for the note
 // title and for editing text blocks.
+const LIST_NUM_RE = /^(\s*)(\d+)\.\s+(.*)$/;
+const LIST_BUL_RE = /^(\s*)([•*\-])\s+(.*)$/;
+
 export function AutoTextarea({
   value, onChange, className = '', placeholder, autoFocus = false,
-  singleLine = false, onDone,
+  singleLine = false, lists = false, onDone,
 }) {
   const ref = React.useRef(null);
+  // Cursor position to restore after a React-driven value change.
+  const pendingCursor = React.useRef(null);
 
   const resize = () => {
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
+    if (pendingCursor.current != null) {
+      el.selectionStart = el.selectionEnd = pendingCursor.current;
+      pendingCursor.current = null;
+    }
   };
 
   React.useLayoutEffect(resize, [value]);
+
+  // Enter on a list line auto-inserts the next marker; an empty list line
+  // exits the list. Shift+Enter falls through to the textarea's default
+  // newline, preserving the soft break inside the same item.
+  const handleListEnter = (e) => {
+    if (!lists || e.key !== 'Enter' || e.shiftKey) return;
+    const ta = e.currentTarget;
+    const pos = ta.selectionStart;
+    const text = ta.value;
+    const before = text.substring(0, pos);
+    const after = text.substring(pos);
+    const lineStart = before.lastIndexOf('\n') + 1;
+    const currentLine = before.substring(lineStart);
+    const numMatch = currentLine.match(LIST_NUM_RE);
+    const bulMatch = currentLine.match(LIST_BUL_RE);
+    if (!numMatch && !bulMatch) return;
+    e.preventDefault();
+    const match = numMatch || bulMatch;
+    const indent = match[1];
+    const body = match[3];
+    if (!body.trim()) {
+      // Empty marker — exit the list by stripping the current line's marker.
+      const newValue = text.substring(0, lineStart) + after;
+      pendingCursor.current = lineStart;
+      onChange(newValue);
+      return;
+    }
+    const nextMarker = numMatch
+      ? `${indent}${parseInt(numMatch[2], 10) + 1}. `
+      : `${indent}${bulMatch[2]} `;
+    const newValue = before + '\n' + nextMarker + after;
+    pendingCursor.current = before.length + 1 + nextMarker.length;
+    onChange(newValue);
+  };
 
   return (
     <textarea
@@ -108,8 +151,9 @@ export function AutoTextarea({
       rows={1}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={(e) => {
-        if (e.key === 'Escape') e.currentTarget.blur();
-        if (singleLine && e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+        if (e.key === 'Escape') { e.currentTarget.blur(); return; }
+        if (singleLine && e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); return; }
+        handleListEnter(e);
       }}
       onBlur={() => onDone && onDone()}
     />
