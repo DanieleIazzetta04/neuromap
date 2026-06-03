@@ -42,8 +42,7 @@ function Logo() {
   );
 }
 
-function TopBar({ onSearch, dark, onToggleDark, onMenu }) {
-  const [q, setQ] = React.useState('');
+function TopBar({ query, onQueryChange, dark, onToggleDark, onMenu }) {
   return (
     <header className="topbar">
       <button className="icon-btn topbar-menu" onClick={onMenu} aria-label="Apri menu">
@@ -58,14 +57,19 @@ function TopBar({ onSearch, dark, onToggleDark, onMenu }) {
            onClick={(e) => e.currentTarget.querySelector('input')?.focus()}>
         <AppIcon.search />
         <input
-          placeholder="Cerca attraverso tutte le note · prova 'ossa'…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && q.trim()) onSearch(q.trim());
-          }}
+          placeholder="Cerca attraverso tutte le note…"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
         />
-        <span className="kbd">⌘K</span>
+        {query
+          ? (
+            <button type="button" className="search-clear" aria-label="Cancella ricerca"
+                    onClick={() => onQueryChange('')}>
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor"
+                   strokeWidth="1.6" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+            </button>
+          )
+          : <span className="kbd">⌘K</span>}
       </div>
 
       <div className="topbar-actions">
@@ -104,6 +108,11 @@ function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [route, setRoute] = React.useState({ kind: 'recenti' });
   const [navOpen, setNavOpen] = React.useState(false);
+  // The search query lives here so the topbar field and the results view
+  // share one source of truth — typing filters live, no Enter needed.
+  const [query, setQuery] = React.useState('');
+  // Where to return when the search box is cleared (the route before search).
+  const prevRoute = React.useRef({ kind: 'recenti' });
 
   const [dark, setDark] = React.useState(
     () => document.documentElement.dataset.theme === 'dark',
@@ -117,8 +126,26 @@ function App() {
     } catch (e) { /* ignore */ }
   }, [dark]);
 
-  const onOpenNote = (id) => setRoute({ kind: 'note', id: id || (notes[0] && notes[0].id) });
-  const onSearch = (q) => setRoute({ kind: 'search', q });
+  // Plain navigation (sidebar, opening a note) clears the search box.
+  const navigate = (r) => {
+    setQuery('');
+    prevRoute.current = r;
+    setRoute(r);
+    setNavOpen(false);
+  };
+  const onOpenNote = (id) => navigate({ kind: 'note', id: id || (notes[0] && notes[0].id) });
+
+  // Live search: every keystroke filters. Empty query returns to the
+  // previous route instead of stranding the user on an empty results page.
+  const onQueryChange = (q) => {
+    setQuery(q);
+    if (q.trim()) {
+      if (route.kind !== 'search') prevRoute.current = route;
+      setRoute({ kind: 'search' });
+    } else {
+      setRoute(prevRoute.current);
+    }
+  };
 
   // Keyboard: ⌘K focuses the topbar search field.
   React.useEffect(() => {
@@ -135,15 +162,16 @@ function App() {
 
   return (
     <div className="app" data-palette={t.palette} data-density={t.density}>
-      <TopBar onSearch={onSearch} dark={dark} onToggleDark={() => setDark((d) => !d)}
+      <TopBar query={query} onQueryChange={onQueryChange} dark={dark}
+              onToggleDark={() => setDark((d) => !d)}
               onMenu={() => setNavOpen(true)} />
       <Sidebar route={route}
-               onRoute={(r) => { setRoute(r); setNavOpen(false); }}
+               onRoute={navigate}
                open={navOpen}
                onClose={() => setNavOpen(false)} />
       <main className="main">
-        {route.kind === 'note'    && <EditorView noteId={route.id} onOpenNote={onOpenNote} onRoute={setRoute} />}
-        {route.kind === 'search'  && <SearchView initialQ={route.q} onOpenNote={onOpenNote} />}
+        {route.kind === 'note'    && <EditorView noteId={route.id} onOpenNote={onOpenNote} onRoute={navigate} />}
+        {route.kind === 'search'  && <SearchView q={query} onOpenNote={onOpenNote} />}
         {route.kind === 'folder'  && <FolderView folderId={route.id} onOpenNote={onOpenNote} />}
         {route.kind === 'recenti' && <RecentView mode="recenti" onOpenNote={onOpenNote} />}
         {route.kind === 'star'    && <RecentView mode="star" onOpenNote={onOpenNote} />}
@@ -172,10 +200,10 @@ function App() {
 
         <TweakSection label="Vista veloce" />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-          <button className="twk-btn secondary" onClick={() => setRoute({ kind: 'recenti' })}>Recenti</button>
-          <button className="twk-btn secondary" onClick={() => setRoute({ kind: 'note', id: 'n01' })}>Editor</button>
-          <button className="twk-btn secondary" onClick={() => setRoute({ kind: 'search', q: 'ossa' })}>Ricerca</button>
-          <button className="twk-btn secondary" onClick={() => setRoute({ kind: 'biblio' })}>Bibliografia</button>
+          <button className="twk-btn secondary" onClick={() => navigate({ kind: 'recenti' })}>Recenti</button>
+          <button className="twk-btn secondary" onClick={() => navigate({ kind: 'star' })}>Preferite</button>
+          <button className="twk-btn secondary" onClick={() => navigate({ kind: 'folder' })}>Cartelle</button>
+          <button className="twk-btn secondary" onClick={() => navigate({ kind: 'biblio' })}>Bibliografia</button>
         </div>
       </TweaksPanel>
     </div>

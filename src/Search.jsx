@@ -286,14 +286,11 @@ function SearchGraph({ results, q, onOpenNote }) {
 }
 
 // ─── Search view ─────────────────────────────────────────────────────────
-function SearchView({ initialQ, onOpenNote }) {
+function SearchView({ q = '', onOpenNote }) {
   const store = useStore();
   const { notes } = store;
-  const [q, setQ] = React.useState(initialQ || '');
   const [mode, setMode] = React.useState('list'); // 'list' | 'graph'
   const results = React.useMemo(() => searchNotes(notes, q, store), [notes, q, store]);
-
-  React.useEffect(() => { setQ(initialQ || ''); }, [initialQ]);
 
   const folderCount = new Set(results.map(r => r.note.folder)).size;
 

@@ -161,6 +161,16 @@ body::before {
   border-radius: 4px;
   padding: 1px 5px;
 }
+.search-clear {
+  appearance: none; border: 0; background: transparent;
+  flex: 0 0 auto;
+  width: 20px; height: 20px; padding: 0;
+  display: grid; place-items: center;
+  border-radius: 50%; cursor: pointer;
+  color: var(--ink-3);
+  transition: background .12s, color .12s;
+}
+.search-clear:hover { background: var(--paper-2); color: var(--ink); }
 
 .topbar-actions { display: flex; align-items: center; gap: 4px; }
 
