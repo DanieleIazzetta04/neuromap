@@ -5,6 +5,7 @@ import {
   BIBLIO as SEED_BIBLIO,
   REGIONS as SEED_REGIONS,
 } from './data.js';
+import { deleteFile } from './files.js';
 
 /* NeuroMap — Store
    Single source of truth for folders, notes & bibliography sources,
@@ -214,8 +215,11 @@ export function StoreProvider({ children }) {
       return src.id;
     },
 
-    // Removing a source also detaches it from every note that cited it.
+    // Removing a source also detaches it from every note that cited it, and
+    // drops its attached file from IndexedDB.
     deleteSource: (id) => {
+      const src = sources.find((x) => x.id === id);
+      if (src && src.file && src.file.id) deleteFile(src.file.id).catch(() => {});
       setState((s) => ({
         ...s,
         sources: s.sources.filter((x) => x.id !== id),

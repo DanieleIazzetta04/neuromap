@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from './store.jsx';
+import { putFile, extractDocMeta, formatSize } from './files.js';
 
 /* NeuroMap — Shared UI primitives */
 
@@ -196,18 +197,74 @@ export function ColorSwatches({ value, onChange }) {
   );
 }
 
-// SourceFormModal — a small modal form for adding a bibliography source.
-export function SourceFormModal({ onClose, onSave }) {
+// SourceFormModal — add a bibliography source. A file (PDF or other) can be
+// dropped or browsed: it is attached to the source and its metadata pre-fills
+// the empty fields. The blob is only persisted to IndexedDB on save.
+const fileIco = (
+  <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor"
+       strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 1.5H4.5A1.5 1.5 0 0 0 3 3v10a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V5.5L9 1.5z" />
+    <path d="M9 1.5V5.5H13" />
+  </svg>
+);
+
+export function SourceFormModal({ onClose, onSave, initialFile = null }) {
   const [form, setForm] = React.useState({ title: '', authors: '', year: '', journal: '' });
+  const [file, setFile] = React.useState(null);   // { raw, name, type, size }
+  const [reading, setReading] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [dragging, setDragging] = React.useState(false);
+  const fileRef = React.useRef(null);
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  const submit = () => {
-    if (!form.title.trim()) return;
+  const acceptFile = React.useCallback(async (f) => {
+    if (!f) return;
+    setFile({ raw: f, name: f.name, type: f.type, size: f.size });
+    setReading(true);
+    try {
+      const meta = await extractDocMeta(f);
+      // Only fill fields the user hasn't already typed into.
+      setForm((cur) => ({
+        ...cur,
+        title: cur.title.trim() ? cur.title : (meta.title || ''),
+        authors: cur.authors.trim() ? cur.authors : (meta.authors || ''),
+        year: cur.year.trim() ? cur.year : (meta.year || ''),
+      }));
+    } finally {
+      setReading(false);
+    }
+  }, []);
+
+  // If opened from a drop on the panel/view, ingest that file immediately.
+  React.useEffect(() => {
+    if (initialFile) acceptFile(initialFile);
+  }, [initialFile, acceptFile]);
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) acceptFile(f);
+  };
+
+  const submit = async () => {
+    if (!form.title.trim() || busy) return;
+    setBusy(true);
+    let fileMeta = null;
+    if (file) {
+      try {
+        const id = await putFile(file.raw);
+        fileMeta = { id, name: file.name, type: file.type, size: file.size };
+      } catch (e) {
+        /* storage failed — still save the source, just without the file */
+      }
+    }
     onSave({
       title: form.title.trim(),
       authors: form.authors.trim(),
       year: form.year.trim(),
       journal: form.journal.trim(),
+      file: fileMeta,
     });
   };
 
@@ -215,6 +272,37 @@ export function SourceFormModal({ onClose, onSave }) {
     <div className="modal-scrim" onMouseDown={onClose}>
       <div className="modal modal--form" onMouseDown={(e) => e.stopPropagation()}>
         <h3 className="modal-title">Nuova fonte</h3>
+
+        <input ref={fileRef} type="file" hidden
+               accept=".pdf,application/pdf,.doc,.docx,.epub,.txt,.rtf"
+               onChange={(e) => acceptFile(e.target.files && e.target.files[0])} />
+
+        {file ? (
+          <div className="source-file">
+            <span className="source-file-ico">{fileIco}</span>
+            <span className="source-file-text">
+              <span className="source-file-name">{file.name}</span>
+              <span className="source-file-meta">
+                {reading ? 'Lettura metadati…' : formatSize(file.size)}
+              </span>
+            </span>
+            <button type="button" className="source-file-x" title="Rimuovi file"
+                    onClick={() => setFile(null)}>✕</button>
+          </div>
+        ) : (
+          <div className={`source-drop ${dragging ? 'is-drag' : ''}`}
+               onDragOver={(e) => { e.preventDefault(); if (!dragging) setDragging(true); }}
+               onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); }}
+               onDrop={onDrop}
+               onClick={() => fileRef.current && fileRef.current.click()}>
+            <span className="source-drop-ico">{fileIco}</span>
+            <span className="source-drop-text">
+              <b>Trascina un file qui</b> o clicca per sfogliare
+            </span>
+            <span className="source-drop-hint">PDF, Word, ePub… i campi si compilano da soli</span>
+          </div>
+        )}
+
         <label className="field">
           <span>Titolo</span>
           <input autoFocus value={form.title} onChange={set('title')}
@@ -237,7 +325,9 @@ export function SourceFormModal({ onClose, onSave }) {
         </div>
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onClose}>Annulla</button>
-          <button type="button" className="btn btn-primary" onClick={submit}>Aggiungi fonte</button>
+          <button type="button" className="btn btn-primary" onClick={submit} disabled={busy}>
+            {busy ? 'Salvataggio…' : 'Aggiungi fonte'}
+          </button>
         </div>
       </div>
     </div>

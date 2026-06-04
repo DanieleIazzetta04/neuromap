@@ -2,6 +2,7 @@ import React from 'react';
 import { useStore, useConfirm, makeBlock } from './store.jsx';
 import { AutoTextarea, Dropdown, SourceFormModal } from './ui.jsx';
 import { ChartBlock } from './Charts.jsx';
+import { openFile } from './files.js';
 
 /* NeuroMap — Note editor
    Editable title + blocks (paragrafo, titoli, callout, tabella, immagine,
@@ -22,6 +23,7 @@ const ico = {
   info: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="9" r="6.5" /><path d="M9 6v3.5M9 12.2v.1" /></svg>,
   image: <svg viewBox="0 0 18 18" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="3.5" width="13" height="11" rx="1.6" /><circle cx="6.6" cy="7.4" r="1.4" /><path d="M3.5 12.5l3.5-3 2.6 2.2 2.4-1.8 2.5 2.1" /></svg>,
   panel: <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5" /><path d="M10.5 3v10" /></svg>,
+  file: <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 1.5H4.5A1.5 1.5 0 0 0 3 3v10a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V5.5L9 1.5z" /><path d="M9 1.5V5.5H13" /></svg>,
 };
 
 function placeholderFor(type) {
@@ -222,24 +224,42 @@ function TableBlock({ block, onChange }) {
   );
 }
 
-// ─── Image block — upload (downscaled) or URL ────────────────────────────
+// ─── Image block — drag-and-drop, upload (downscaled) or URL ──────────────
 function ImageBlock({ block, onChange }) {
   const fileRef = React.useRef(null);
   const [url, setUrl] = React.useState('');
+  const [dragging, setDragging] = React.useState(false);
 
   const pick = (file) => {
-    if (file) downscaleImage(file, (src) => onChange({ ...block, src }));
+    if (file && file.type.startsWith('image/')) {
+      downscaleImage(file, (src) => onChange({ ...block, src }));
+    }
+  };
+
+  // Shared drag-and-drop handlers: accept a dropped image file, or an image
+  // URL dragged from another tab.
+  const dropHandlers = {
+    onDragOver: (e) => { e.preventDefault(); if (!dragging) setDragging(true); },
+    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); },
+    onDrop: (e) => {
+      e.preventDefault();
+      setDragging(false);
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) { pick(file); return; }
+      const uri = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+      if (uri && /^https?:\/\//.test(uri.trim())) onChange({ ...block, src: uri.trim() });
+    },
   };
 
   if (!block.src) {
     return (
-      <div className="image-empty">
+      <div className={`image-empty ${dragging ? 'is-drag' : ''}`} {...dropHandlers}>
         <input ref={fileRef} type="file" accept="image/*" hidden
                onChange={(e) => pick(e.target.files && e.target.files[0])} />
         <button type="button" className="image-pick"
                 onClick={() => fileRef.current && fileRef.current.click()}>
           {ico.image}
-          <span>Carica un'immagine</span>
+          <span>{dragging ? 'Rilascia qui l’immagine' : 'Trascina o carica un’immagine'}</span>
         </button>
         <input className="image-url" value={url}
                placeholder="…oppure incolla un URL e premi Invio"
@@ -253,13 +273,14 @@ function ImageBlock({ block, onChange }) {
   }
 
   return (
-    <figure className="image-frame">
+    <figure className={`image-frame ${dragging ? 'is-drag' : ''}`} {...dropHandlers}>
       <div className="image-photo">
         <img src={block.src} alt={block.caption || ''} />
         <button type="button" className="image-change"
                 onClick={() => fileRef.current && fileRef.current.click()}>Cambia</button>
         <input ref={fileRef} type="file" accept="image/*" hidden
                onChange={(e) => pick(e.target.files && e.target.files[0])} />
+        {dragging && <div className="image-drop-overlay">Rilascia per sostituire</div>}
       </div>
       <figcaption>
         <input className="cell-input" value={block.caption || ''} placeholder="Didascalia…"
@@ -343,6 +364,8 @@ function Block({ block, editing, setEditing, onChange, onDelete, onMove, isFirst
 function BibliographyPanel({ note, onUpdate, onLink }) {
   const store = useStore();
   const [showForm, setShowForm] = React.useState(false);
+  const [pendingFile, setPendingFile] = React.useState(null);
+  const [dragging, setDragging] = React.useState(false);
   const noteRefs = (note.refs || []).map((rid) => store.getSource(rid)).filter(Boolean);
   const available = store.sources.filter((s) => !(note.refs || []).includes(s.id));
   const related = (note.related || []).map(store.getNote).filter(Boolean);
@@ -352,10 +375,23 @@ function BibliographyPanel({ note, onUpdate, onLink }) {
   const createAndAttach = (data) => {
     attach(store.createSource(data));
     setShowForm(false);
+    setPendingFile(null);
+  };
+  const openForm = (file = null) => { setPendingFile(file); setShowForm(true); };
+
+  // Dropping a file straight onto the panel opens the form pre-filled with it.
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) openForm(f);
   };
 
   return (
-    <aside className="biblio">
+    <aside className={`biblio ${dragging ? 'is-drag' : ''}`}
+           onDragOver={(e) => { e.preventDefault(); if (!dragging) setDragging(true); }}
+           onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); }}
+           onDrop={onDrop}>
       <div className="biblio-head">
         <h4>Bibliografia</h4>
         <span className="chip" style={{ '--c': 'var(--accent)' }}>{noteRefs.length} fonti</span>
@@ -370,6 +406,13 @@ function BibliographyPanel({ note, onUpdate, onLink }) {
               <span style={{ color: 'var(--ink-3)' }}>({r.year || 's.d.'}).</span>{' '}
               {r.title}.{' '}
               <span className="biblio-journal">{r.journal}</span>
+              {r.file && (
+                <button type="button" className="biblio-file"
+                        title={`Apri ${r.file.name}`}
+                        onClick={() => openFile(r.file.id, r.file.name)}>
+                  {ico.file} {r.file.name}
+                </button>
+              )}
             </div>
             <button type="button" className="row-action" title="Rimuovi fonte"
                     onClick={() => detach(r.id)}>{ico.x}</button>
@@ -389,7 +432,7 @@ function BibliographyPanel({ note, onUpdate, onLink }) {
           )}
         >
           <button type="button" className="menu-item menu-item--accent"
-                  onClick={() => setShowForm(true)}>
+                  onClick={() => openForm()}>
             {ico.plus} Crea nuova fonte
           </button>
           {available.length > 0 && <div className="menu-sep" />}
@@ -428,7 +471,11 @@ function BibliographyPanel({ note, onUpdate, onLink }) {
       )}
 
       {showForm && (
-        <SourceFormModal onClose={() => setShowForm(false)} onSave={createAndAttach} />
+        <SourceFormModal
+          onClose={() => { setShowForm(false); setPendingFile(null); }}
+          onSave={createAndAttach}
+          initialFile={pendingFile}
+        />
       )}
     </aside>
   );

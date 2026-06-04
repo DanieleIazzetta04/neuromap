@@ -1407,6 +1407,77 @@ textarea.editor-title::placeholder { color: var(--ink-4); }
   opacity: 0; transition: opacity .12s;
 }
 .image-frame:hover .image-change { opacity: 1; }
+.image-empty.is-drag {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.image-empty.is-drag .image-pick { color: var(--accent); }
+.image-frame.is-drag { outline: 2px solid var(--accent); outline-offset: 2px; }
+.image-drop-overlay {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  background: color-mix(in oklch, var(--accent) 30%, transparent);
+  color: var(--paper); font-size: 13px; font-weight: 600;
+  letter-spacing: .02em;
+  pointer-events: none;
+}
+
+/* ─── Bibliography: attached files & drop-to-add ───────────────────────── */
+.biblio-file {
+  appearance: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 6px; max-width: 100%;
+  padding: 3px 9px;
+  border: .5px solid var(--rule); border-radius: 999px;
+  background: var(--paper-3); color: var(--accent);
+  font: inherit; font-size: 11.5px;
+}
+.biblio-file svg { flex: 0 0 auto; }
+.biblio-file span, .biblio-file {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.biblio-file:hover { border-color: var(--accent); background: var(--accent-tint); }
+.biblio.is-drag {
+  outline: 2px dashed var(--accent); outline-offset: -6px;
+  background: var(--accent-tint);
+}
+.folder-view.is-drag { outline: 2px dashed var(--accent); outline-offset: -10px; }
+
+/* ─── Source form: dropzone + attached file ────────────────────────────── */
+.source-drop {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 18px 14px; margin-bottom: 14px;
+  border: 1.5px dashed var(--rule-strong); border-radius: var(--r-2);
+  background: var(--paper-2); cursor: pointer;
+  text-align: center; color: var(--ink-2);
+  transition: border-color .12s, background .12s, color .12s;
+}
+.source-drop:hover { border-color: var(--accent); color: var(--accent); }
+.source-drop.is-drag { border-color: var(--accent); background: var(--accent-tint); color: var(--accent); }
+.source-drop-ico { color: var(--ink-3); }
+.source-drop.is-drag .source-drop-ico, .source-drop:hover .source-drop-ico { color: var(--accent); }
+.source-drop-text { font-size: 13px; }
+.source-drop-hint { font-size: 11.5px; color: var(--ink-3); }
+.source-file {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; margin-bottom: 14px;
+  border: .5px solid var(--rule); border-radius: var(--r-2);
+  background: var(--paper-2);
+}
+.source-file-ico { color: var(--accent); flex: 0 0 auto; }
+.source-file-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.source-file-name {
+  font-size: 13px; color: var(--ink); font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.source-file-meta { font-size: 11px; color: var(--ink-3); }
+.source-file-x {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
+  color: var(--ink-3); font-size: 13px;
+}
+.source-file-x:hover { background: var(--rose-soft); color: var(--rose); }
 
 /* ─── Chart block ──────────────────────────────────────────────────────── */
 .chart-block { margin: 8px 0; }
